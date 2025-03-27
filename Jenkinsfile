@@ -1,23 +1,23 @@
 pipeline {
-    agent any
+    agent any  // Use any available agent
 
     environment {
-        DOCKER_IMAGE = 'your-dockerhub-username/simple-web-app'
-        SONARQUBE_URL = 'http://your-sonarqube-server:9000'
-        SONARQUBE_TOKEN = credentials('sonar-token')  // Add this in Jenkins credentials
+        DOCKER_IMAGE = "gopi80/simple-webapp"
+        SONAR_HOST_URL = "http://35.174.16.51:9000/"
+        SONAR_PROJECT_KEY = "project-AWS"
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Checkout Code') {
             steps {
-                git 'https://github.com/your-repo/simple-web-app.git'
+                git branch: 'master', url: 'https://github.com/mabbugopichand/project-AWS.git'
             }
         }
 
-        stage('Static Code Analysis') {
+        stage('SonarQube Analysis') {
             steps {
-                script {
-                    sh "sonar-scanner -Dsonar.host.url=${SONARQUBE_URL} -Dsonar.login=${SONARQUBE_TOKEN}"
+                withSonarQubeEnv(credentialsId: 'jenkins') {
+                    sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=$SONAR_PROJECT_KEY -Dsonar.host.url=$SONAR_HOST_URL'
                 }
             }
         }
@@ -25,22 +25,23 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -t ${DOCKER_IMAGE}:latest ."
+                    sh 'docker build -t $DOCKER_IMAGE .'
                 }
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Push Docker Image to Docker Hub') {
             steps {
-                withDockerRegistry([credentialsId: 'docker-cred', url: '']) {
-                    sh "docker push ${DOCKER_IMAGE}:latest"
+                withCredentials([usernamePassword(credentialsId: 'docker-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                    sh 'docker push $DOCKER_IMAGE'
                 }
             }
         }
 
-        stage('Cleanup') {
+        stage('Deploy Container') {
             steps {
-                sh "docker rmi ${DOCKER_IMAGE}:latest"
+                sh 'docker run -d -p 8080:80 $DOCKER_IMAGE'
             }
         }
     }
